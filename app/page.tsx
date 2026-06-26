@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { supabase, LawyerTask } from '@/lib/supabase'
+import { LawyerTask } from '@/lib/supabase'
 
 type Stats = {
   totalMinutes: number
@@ -34,6 +34,7 @@ function minsToHours(m: number) {
 export default function Dashboard() {
   const [tasks, setTasks] = useState<LawyerTask[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
 
   const [dateFrom, setDateFrom] = useState('')
@@ -47,46 +48,46 @@ export default function Dashboard() {
 
   const fetchTasks = useCallback(async () => {
     setLoading(true)
-    let q = supabase
-      .from('lawyer_tasks')
-      .select('*')
-      .order('report_date', { ascending: false })
-      .order('id', { ascending: false })
+    setError(null)
 
-    if (dateFrom) q = q.gte('report_date', dateFrom)
-    if (dateTo) q = q.lte('report_date', dateTo)
-    if (filterCategory) q = q.eq('category', filterCategory)
-    if (filterCompleted === 'yes') q = q.eq('is_completed', true)
-    if (filterCompleted === 'no') q = q.eq('is_completed', false)
-    if (filterHasTime === 'yes') q = q.not('time_minutes', 'is', null)
-    if (filterHasTime === 'no') q = q.is('time_minutes', null)
-    if (filterSource) q = q.eq('source', filterSource)
+    const params = new URLSearchParams()
+    if (dateFrom) params.set('dateFrom', dateFrom)
+    if (dateTo) params.set('dateTo', dateTo)
+    if (filterCategory) params.set('category', filterCategory)
+    if (filterCompleted) params.set('completed', filterCompleted)
+    if (filterHasTime) params.set('hasTime', filterHasTime)
+    if (filterSource) params.set('source', filterSource)
 
-    const { data, error } = await q
-    if (error) { console.error(error); setLoading(false); return }
+    try {
+      const res = await fetch(`/api/tasks?${params}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      let result: LawyerTask[] = await res.json()
 
-    let result = data as LawyerTask[]
-    if (filterClient) result = result.filter(t => t.client_name?.toLowerCase().includes(filterClient.toLowerCase()))
-    if (search) result = result.filter(t =>
-      t.task_description?.toLowerCase().includes(search.toLowerCase()) ||
-      t.client_name?.toLowerCase().includes(search.toLowerCase()) ||
-      t.raw_line?.toLowerCase().includes(search.toLowerCase())
-    )
+      if (filterClient) result = result.filter(t => t.client_name?.toLowerCase().includes(filterClient.toLowerCase()))
+      if (search) result = result.filter(t =>
+        t.task_description?.toLowerCase().includes(search.toLowerCase()) ||
+        t.client_name?.toLowerCase().includes(search.toLowerCase()) ||
+        t.raw_line?.toLowerCase().includes(search.toLowerCase())
+      )
 
-    setTasks(result)
+      setTasks(result)
 
-    const s: Stats = { totalMinutes: 0, totalTasks: result.length, completedTasks: 0, tasksWithoutTime: 0, byCategory: {}, byClient: {}, byDate: {} }
-    for (const t of result) {
-      if (t.time_minutes) s.totalMinutes += t.time_minutes
-      if (t.is_completed) s.completedTasks++
-      if (!t.time_minutes) s.tasksWithoutTime++
-      const cat = t.category || 'uncategorized'
-      s.byCategory[cat] = (s.byCategory[cat] || 0) + (t.time_minutes || 0)
-      if (t.client_name) s.byClient[t.client_name] = (s.byClient[t.client_name] || 0) + (t.time_minutes || 0)
-      if (t.report_date) s.byDate[t.report_date] = (s.byDate[t.report_date] || 0) + (t.time_minutes || 0)
+      const s: Stats = { totalMinutes: 0, totalTasks: result.length, completedTasks: 0, tasksWithoutTime: 0, byCategory: {}, byClient: {}, byDate: {} }
+      for (const t of result) {
+        if (t.time_minutes) s.totalMinutes += t.time_minutes
+        if (t.is_completed) s.completedTasks++
+        if (!t.time_minutes) s.tasksWithoutTime++
+        const cat = t.category || 'uncategorized'
+        s.byCategory[cat] = (s.byCategory[cat] || 0) + (t.time_minutes || 0)
+        if (t.client_name) s.byClient[t.client_name] = (s.byClient[t.client_name] || 0) + (t.time_minutes || 0)
+        if (t.report_date) s.byDate[t.report_date] = (s.byDate[t.report_date] || 0) + (t.time_minutes || 0)
+      }
+      setStats(s)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка загрузки')
+    } finally {
+      setLoading(false)
     }
-    setStats(s)
-    setLoading(false)
   }, [dateFrom, dateTo, filterCategory, filterCompleted, filterHasTime, filterSource, filterClient, search])
 
   useEffect(() => { fetchTasks() }, [fetchTasks])
@@ -104,6 +105,13 @@ export default function Dashboard() {
       </div>
 
       <div className="max-w-screen-xl mx-auto px-6 py-6 space-y-6">
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+            Ошибка: {error}
+          </div>
+        )}
+
         {stats && (
           <div className="bg-blue-600 text-white rounded-xl p-5 flex flex-wrap gap-6 items-center">
             <div>
@@ -126,6 +134,7 @@ export default function Dashboard() {
               {Object.entries(stats.byCategory).sort((a, b) => b[1] - a[1]).map(([cat, mins]) => (
                 <StatRow key={cat} label={CATEGORY_LABELS[cat] || cat} value={`${mins} мин (${minsToHours(mins)})`} />
               ))}
+              {Object.keys(stats.byCategory).length === 0 && <p className="text-gray-400 text-sm">Нет данных</p>}
             </StatCard>
             <StatCard title="Время по клиентам (топ 10)">
               {Object.entries(stats.byClient).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([client, mins]) => (
@@ -137,6 +146,7 @@ export default function Dashboard() {
               {Object.entries(stats.byDate).sort((a, b) => b[0].localeCompare(a[0])).map(([date, mins]) => (
                 <StatRow key={date} label={date} value={`${mins} мин / ${minsToHours(mins)}`} />
               ))}
+              {Object.keys(stats.byDate).length === 0 && <p className="text-gray-400 text-sm">Нет данных</p>}
             </StatCard>
           </div>
         )}
