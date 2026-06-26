@@ -1,12 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// This route reads request params and live data, so it must never be statically
+// optimised. Forcing dynamic also avoids build-time evaluation of the handler.
+export const dynamic = 'force-dynamic'
+
+function getClient() {
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  return createClient(url, key)
+}
 
 export async function GET(req: NextRequest) {
+  const supabase = getClient()
+  if (!supabase) {
+    return NextResponse.json(
+      { error: 'Supabase is not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing)' },
+      { status: 500 }
+    )
+  }
+
   const { searchParams } = new URL(req.url)
   const dateFrom = searchParams.get('dateFrom')
   const dateTo = searchParams.get('dateTo')
