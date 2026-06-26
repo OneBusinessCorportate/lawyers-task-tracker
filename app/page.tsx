@@ -113,18 +113,11 @@ export default function Dashboard() {
         )}
 
         {stats && (
-          <div className="bg-blue-600 text-white rounded-xl p-5 flex flex-wrap gap-6 items-center">
-            <div>
-              <p className="text-blue-200 text-sm font-medium uppercase tracking-wide">К оплате за период</p>
-              <p className="text-4xl font-bold mt-1">{stats.totalMinutes} мин</p>
-              <p className="text-blue-200 mt-1">{minsToHours(stats.totalMinutes)}</p>
-            </div>
-            <div className="h-12 w-px bg-blue-400 hidden sm:block" />
-            <div className="flex flex-wrap gap-6">
-              <Metric label="Всего задач" value={stats.totalTasks} />
-              <Metric label="Выполнено" value={stats.completedTasks} />
-              <Metric label="Без времени" value={stats.tasksWithoutTime} warn={stats.tasksWithoutTime > 0} />
-            </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <SummaryCard label="Всего времени" value={`${stats.totalMinutes} мин`} sub={minsToHours(stats.totalMinutes)} color="blue" />
+            <SummaryCard label="Всего задач" value={String(stats.totalTasks)} color="gray" />
+            <SummaryCard label="Выполнено" value={String(stats.completedTasks)} sub={stats.totalTasks ? `${Math.round(stats.completedTasks / stats.totalTasks * 100)}%` : ''} color="green" />
+            <SummaryCard label="Без времени" value={String(stats.tasksWithoutTime)} color={stats.tasksWithoutTime > 0 ? 'amber' : 'gray'} />
           </div>
         )}
 
@@ -200,7 +193,7 @@ export default function Dashboard() {
             {!loading && <span className="text-sm text-gray-400">({tasks.length})</span>}
             {stats && stats.tasksWithoutTime > 0 && (
               <span className="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium">
-                ⚠ {stats.tasksWithoutTime} задач без времени — оплата неполная
+                ⚠ {stats.tasksWithoutTime} задач без времени
               </span>
             )}
           </div>
@@ -264,11 +257,18 @@ export default function Dashboard() {
   )
 }
 
-function Metric({ label, value, warn }: { label: string; value: number; warn?: boolean }) {
+function SummaryCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color: 'blue' | 'green' | 'amber' | 'gray' }) {
+  const colors = {
+    blue: 'bg-blue-50 border-blue-200 text-blue-700',
+    green: 'bg-green-50 border-green-200 text-green-700',
+    amber: 'bg-amber-50 border-amber-200 text-amber-700',
+    gray: 'bg-white border-gray-200 text-gray-700',
+  }
   return (
-    <div>
-      <p className="text-blue-200 text-xs uppercase tracking-wide">{label}</p>
-      <p className={`text-2xl font-bold mt-0.5 ${warn && value > 0 ? 'text-amber-300' : ''}`}>{value}</p>
+    <div className={`rounded-xl border p-4 ${colors[color]}`}>
+      <p className="text-xs font-medium uppercase tracking-wide opacity-70">{label}</p>
+      <p className="text-3xl font-bold mt-1">{value}</p>
+      {sub && <p className="text-sm mt-0.5 opacity-60">{sub}</p>}
     </div>
   )
 }
